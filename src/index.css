@@ -1,0 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Mulish:ital,wght@0,200..1000;1,200..1000&family=Quicksand:wght@300..700&display=swap');
+@import "tailwindcss";
+
+.font-mullish{
+  font-family: "Mulish", sans-serif;
+  font-optical-sizing: auto;
+}
+
+html{
+  font-family: "Mulish", sans-serif;
+  font-optical-sizing: auto;
+}
+
+.bg-theme{
+  background: linear-gradient(180deg, #0F172A 0%, #0B3A6E 100%);
+}
+
+.bg-content{
+  background-color: #F8FAFC;
+}
+
+.text-content{
+  color: #F8FAFC;
+}
