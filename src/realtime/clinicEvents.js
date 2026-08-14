@@ -386,10 +386,9 @@ export const connectClinicEvents = (
     "🔌 Connecting to clinic SSE..."
   );
 
-  const eventSource =
-    new EventSource(
-      "http://localhost:3000/events"
-    );
+  const eventSource = new EventSource(
+  import.meta.env.VITE_SSE_URL
+);
 
   // -----------------------------------------------
   // Connected
