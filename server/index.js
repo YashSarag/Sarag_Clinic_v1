@@ -19,6 +19,57 @@ dotenv.config();
 const app = express();
 
 // =====================================================
+// CORS
+// =====================================================
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://sarag-clinic-v2.netlify.app",
+
+  // Optional: current Netlify deploy preview
+  "https://6a7f2af73491cbb289195d81--sarag-clinic-v2.netlify.app",
+
+  // Environment variable
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow Postman / server-to-server requests
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.log("❌ CORS blocked origin:", origin);
+
+    return callback(
+      new Error("Not allowed by CORS")
+    );
+  },
+
+  methods: [
+    "GET",
+    "POST",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
+
+  credentials: true,
+};
+
+// Apply CORS globally
+app.use(cors(corsOptions));
+
+
+// =====================================================
 // DATABASE CONNECTION
 // =====================================================
 
@@ -34,6 +85,7 @@ const ensureDBConnection = async () => {
   dbConnected = true;
 };
 
+
 // =====================================================
 // APOLLO SERVER
 // =====================================================
@@ -43,8 +95,9 @@ const server = new ApolloServer({
   resolvers,
 });
 
+
 // =====================================================
-// INITIALIZE APOLLO
+// APOLLO INITIALIZATION
 // =====================================================
 
 let apolloStarted = false;
@@ -52,38 +105,13 @@ let apolloStarted = false;
 const initializeApollo = async () => {
   if (!apolloStarted) {
     await server.start();
+
     apolloStarted = true;
+
+    console.log("🚀 Apollo Server initialized");
   }
 };
 
-// =====================================================
-// CORS
-// =====================================================
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  process.env.FRONTEND_URL,
-].filter(Boolean);
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests without origin
-    // e.g. Postman/server-side requests
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(
-      new Error("Not allowed by CORS")
-    );
-  },
-
-  credentials: true,
-};
 
 // =====================================================
 // GRAPHQL
@@ -92,23 +120,26 @@ const corsOptions = {
 app.use(
   "/graphql",
 
-  cors(corsOptions),
-
   express.json(),
 
   async (req, res, next) => {
     try {
+      // Make sure database is connected
       await ensureDBConnection();
+
+      // Make sure Apollo is started
       await initializeApollo();
 
+      // Pass request to Apollo
       return expressMiddleware(server)(
         req,
         res,
         next
       );
+
     } catch (error) {
       console.error(
-        "GraphQL initialization error:",
+        "❌ GraphQL initialization error:",
         error
       );
 
@@ -117,27 +148,17 @@ app.use(
   }
 );
 
+
 // =====================================================
 // SSE REALTIME EVENTS
-// =====================================================
-//
-// NOTE:
-// This endpoint works in a traditional Node server.
-// On Vercel, persistent SSE connections have serverless
-// execution/lifetime constraints, and the in-memory
-// EventEmitter is not a reliable cross-instance event bus.
-//
-// We are keeping the endpoint for now so the frontend
-// doesn't break, but we'll redesign realtime separately.
 // =====================================================
 
 app.get(
   "/events",
 
-  cors(corsOptions),
-
   async (req, res) => {
     try {
+
       await ensureDBConnection();
 
       console.log(
@@ -168,6 +189,10 @@ app.get(
         "no"
       );
 
+      // -----------------------------------------------
+      // Flush headers
+      // -----------------------------------------------
+
       if (res.flushHeaders) {
         res.flushHeaders();
       }
@@ -189,22 +214,27 @@ app.get(
       // -----------------------------------------------
 
       const sendEvent = (payload) => {
+
         if (res.writableEnded) {
           return;
         }
 
         try {
+
           res.write(
             `event: clinic-update\n` +
             `data: ${JSON.stringify(
               payload
             )}\n\n`
           );
+
         } catch (error) {
+
           console.error(
-            "SSE write error:",
+            "❌ SSE write error:",
             error
           );
+
         }
       };
 
@@ -222,25 +252,34 @@ app.get(
       // -----------------------------------------------
 
       try {
+
         const dashboardStats =
           await getDashboardStats();
 
         sendEvent({
-          type: "INITIAL_STATS",
 
-          entity: "dashboard",
+          type:
+            "INITIAL_STATS",
 
-          action: "initial",
+          entity:
+            "dashboard",
+
+          action:
+            "initial",
 
           data: {
             dashboardStats,
           },
+
         });
+
       } catch (error) {
+
         console.error(
-          "Failed to get initial stats:",
+          "❌ Failed to get initial stats:",
           error
         );
+
       }
 
       // -----------------------------------------------
@@ -249,47 +288,77 @@ app.get(
 
       const heartbeat =
         setInterval(() => {
+
           if (!res.writableEnded) {
-            res.write(
-              ": heartbeat\n\n"
-            );
+
+            try {
+
+              res.write(
+                ": heartbeat\n\n"
+              );
+
+            } catch (error) {
+
+              console.error(
+                "❌ SSE heartbeat error:",
+                error
+              );
+
+            }
+
           }
+
         }, 30000);
 
       // -----------------------------------------------
       // DISCONNECT
       // -----------------------------------------------
 
-      req.on("close", () => {
-        console.log(
-          "🔌 SSE client disconnected"
-        );
+      req.on(
+        "close",
+        () => {
 
-        clearInterval(heartbeat);
+          console.log(
+            "🔌 SSE client disconnected"
+          );
 
-        eventBus.off(
-          "clinic-update",
-          sendEvent
-        );
+          clearInterval(
+            heartbeat
+          );
 
-        if (!res.writableEnded) {
-          res.end();
+          eventBus.off(
+            "clinic-update",
+            sendEvent
+          );
+
+          if (
+            !res.writableEnded
+          ) {
+            res.end();
+          }
+
         }
-      });
+      );
+
     } catch (error) {
+
       console.error(
-        "SSE error:",
+        "❌ SSE error:",
         error
       );
 
       if (!res.headersSent) {
+
         res.status(500).json({
-          error: "SSE connection failed",
+          error:
+            "SSE connection failed",
         });
+
       }
     }
   }
 );
+
 
 // =====================================================
 // HEALTH CHECK
@@ -297,13 +366,20 @@ app.get(
 
 app.get(
   "/",
-  async (req, res) => {
+  (req, res) => {
+
     res.json({
+
       success: true,
-      message: "Sarag Clinic API is running",
+
+      message:
+        "Sarag Clinic API is running",
+
     });
+
   }
 );
+
 
 // =====================================================
 // ERROR HANDLER
@@ -311,8 +387,9 @@ app.get(
 
 app.use(
   (error, req, res, next) => {
+
     console.error(
-      "Unhandled server error:",
+      "❌ Unhandled server error:",
       error
     );
 
@@ -321,55 +398,73 @@ app.use(
     }
 
     res.status(500).json({
+
       success: false,
+
       message:
         error.message ||
         "Internal server error",
+
     });
+
   }
 );
+
 
 // =====================================================
 // LOCAL DEVELOPMENT
 // =====================================================
 
 if (require.main === module) {
+
   const PORT =
     process.env.PORT || 3000;
 
-  const startLocalServer = async () => {
-    try {
-      await ensureDBConnection();
-      await initializeApollo();
+  const startLocalServer =
+    async () => {
 
-      app.listen(
-        PORT,
-        () => {
-          console.log(
-            `🚀 App is listening at ${PORT}`
-          );
+      try {
 
-          console.log(
-            `GraphQL: http://localhost:${PORT}/graphql`
-          );
+        await ensureDBConnection();
 
-          console.log(
-            `SSE: http://localhost:${PORT}/events`
-          );
-        }
-      );
-    } catch (error) {
-      console.error(
-        "Failed to start server:",
-        error
-      );
+        await initializeApollo();
 
-      process.exit(1);
-    }
-  };
+        app.listen(
+          PORT,
+          () => {
+
+            console.log(
+              `🚀 App is listening at ${PORT}`
+            );
+
+            console.log(
+              `GraphQL: http://localhost:${PORT}/graphql`
+            );
+
+            console.log(
+              `SSE: http://localhost:${PORT}/events`
+            );
+
+          }
+        );
+
+      } catch (error) {
+
+        console.error(
+          "❌ Failed to start server:",
+          error
+        );
+
+        process.exit(1);
+
+      }
+
+    };
 
   startLocalServer();
+
 }
+
 
 // =====================================================
 // EXPORT FOR VERCEL
