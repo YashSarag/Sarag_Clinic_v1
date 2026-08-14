@@ -1,34 +1,38 @@
 const express = require("express");
 const cors = require("cors");
 
-const {
-  ApolloServer,
-} = require("@apollo/server");
-
-const {
-  expressMiddleware,
-} = require("@as-integrations/express5");
+const { ApolloServer } = require("@apollo/server");
+const { expressMiddleware } = require("@as-integrations/express5");
 
 const dotenv = require("dotenv");
 
-const typeDefs =
-  require("./graphql/schema");
+const typeDefs = require("./graphql/schema");
+const resolvers = require("./graphql/resolvers");
 
-const resolvers =
-  require("./graphql/resolvers");
+const connectDB = require("./config/db");
 
-const connectDB =
-  require("./config/db");
-
-const eventBus =
-  require("./events/eventBus");
-
-const getDashboardStats =
-  require("./utils/dashboardStats");
+const eventBus = require("./events/eventBus");
+const getDashboardStats = require("./utils/dashboardStats");
 
 dotenv.config();
 
 const app = express();
+
+// =====================================================
+// DATABASE CONNECTION
+// =====================================================
+
+let dbConnected = false;
+
+const ensureDBConnection = async () => {
+  if (dbConnected) {
+    return;
+  }
+
+  await connectDB();
+
+  dbConnected = true;
+};
 
 // =====================================================
 // APOLLO SERVER
@@ -40,40 +44,101 @@ const server = new ApolloServer({
 });
 
 // =====================================================
-// START SERVER
+// INITIALIZE APOLLO
 // =====================================================
 
-async function startServer() {
-  await server.start();
+let apolloStarted = false;
 
-  // ===================================================
-  // GRAPHQL
-  // ===================================================
+const initializeApollo = async () => {
+  if (!apolloStarted) {
+    await server.start();
+    apolloStarted = true;
+  }
+};
 
-  app.use(
-    "/graphql",
+// =====================================================
+// CORS
+// =====================================================
 
-    cors({
-      origin: "http://localhost:5173",
-    }),
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
-    express.json(),
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests without origin
+    // e.g. Postman/server-side requests
+    if (!origin) {
+      return callback(null, true);
+    }
 
-    expressMiddleware(server)
-  );
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-  // ===================================================
-  // SSE REALTIME EVENTS
-  // ===================================================
+    return callback(
+      new Error("Not allowed by CORS")
+    );
+  },
 
-  app.get(
-    "/events",
+  credentials: true,
+};
 
-    cors({
-      origin: "http://localhost:5173",
-    }),
+// =====================================================
+// GRAPHQL
+// =====================================================
 
-    async (req, res) => {
+app.use(
+  "/graphql",
+
+  cors(corsOptions),
+
+  express.json(),
+
+  async (req, res, next) => {
+    try {
+      await ensureDBConnection();
+      await initializeApollo();
+
+      return expressMiddleware(server)(
+        req,
+        res,
+        next
+      );
+    } catch (error) {
+      console.error(
+        "GraphQL initialization error:",
+        error
+      );
+
+      next(error);
+    }
+  }
+);
+
+// =====================================================
+// SSE REALTIME EVENTS
+// =====================================================
+//
+// NOTE:
+// This endpoint works in a traditional Node server.
+// On Vercel, persistent SSE connections have serverless
+// execution/lifetime constraints, and the in-memory
+// EventEmitter is not a reliable cross-instance event bus.
+//
+// We are keeping the endpoint for now so the frontend
+// doesn't break, but we'll redesign realtime separately.
+// =====================================================
+
+app.get(
+  "/events",
+
+  cors(corsOptions),
+
+  async (req, res) => {
+    try {
+      await ensureDBConnection();
 
       console.log(
         "🔌 New SSE client connected"
@@ -103,16 +168,12 @@ async function startServer() {
         "no"
       );
 
-      // -----------------------------------------------
-      // Flush headers
-      // -----------------------------------------------
-
       if (res.flushHeaders) {
         res.flushHeaders();
       }
 
       // -----------------------------------------------
-      // Initial connection event
+      // CONNECTION EVENT
       // -----------------------------------------------
 
       res.write(
@@ -124,32 +185,31 @@ async function startServer() {
       );
 
       // -----------------------------------------------
-      // Send event to client
+      // SEND EVENT
       // -----------------------------------------------
 
-      const sendEvent = (
-        payload
-      ) => {
-
+      const sendEvent = (payload) => {
         if (res.writableEnded) {
           return;
         }
 
-        console.log(
-          "📡 Sending event to client:",
-          payload.type
-        );
-
-        res.write(
-          `event: clinic-update\n` +
-          `data: ${JSON.stringify(
-            payload
-          )}\n\n`
-        );
+        try {
+          res.write(
+            `event: clinic-update\n` +
+            `data: ${JSON.stringify(
+              payload
+            )}\n\n`
+          );
+        } catch (error) {
+          console.error(
+            "SSE write error:",
+            error
+          );
+        }
       };
 
       // -----------------------------------------------
-      // Subscribe
+      // SUBSCRIBE
       // -----------------------------------------------
 
       eventBus.on(
@@ -158,121 +218,161 @@ async function startServer() {
       );
 
       // -----------------------------------------------
-      // Send initial dashboard stats
+      // INITIAL DASHBOARD STATS
       // -----------------------------------------------
 
       try {
-
         const dashboardStats =
           await getDashboardStats();
 
         sendEvent({
-          type:
-            "INITIAL_STATS",
+          type: "INITIAL_STATS",
 
-          entity:
-            "dashboard",
+          entity: "dashboard",
 
-          action:
-            "initial",
+          action: "initial",
 
           data: {
             dashboardStats,
           },
         });
-
       } catch (error) {
-
         console.error(
           "Failed to get initial stats:",
           error
         );
-
       }
 
       // -----------------------------------------------
-      // Heartbeat
+      // HEARTBEAT
       // -----------------------------------------------
 
       const heartbeat =
         setInterval(() => {
-
-          if (
-            !res.writableEnded
-          ) {
+          if (!res.writableEnded) {
             res.write(
               ": heartbeat\n\n"
             );
           }
-
         }, 30000);
 
       // -----------------------------------------------
-      // Disconnect
+      // DISCONNECT
       // -----------------------------------------------
 
-      req.on(
-        "close",
-        () => {
+      req.on("close", () => {
+        console.log(
+          "🔌 SSE client disconnected"
+        );
 
-          console.log(
-            "🔌 SSE client disconnected"
-          );
+        clearInterval(heartbeat);
 
-          clearInterval(
-            heartbeat
-          );
+        eventBus.off(
+          "clinic-update",
+          sendEvent
+        );
 
-          eventBus.off(
-            "clinic-update",
-            sendEvent
-          );
-
-          if (
-            !res.writableEnded
-          ) {
-            res.end();
-          }
+        if (!res.writableEnded) {
+          res.end();
         }
+      });
+    } catch (error) {
+      console.error(
+        "SSE error:",
+        error
       );
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "SSE connection failed",
+        });
+      }
     }
-  );
+  }
+);
 
-  // ===================================================
-  // DATABASE
-  // ===================================================
+// =====================================================
+// HEALTH CHECK
+// =====================================================
 
-  await connectDB();
+app.get(
+  "/",
+  async (req, res) => {
+    res.json({
+      success: true,
+      message: "Sarag Clinic API is running",
+    });
+  }
+);
 
-  // ===================================================
-  // START EXPRESS
-  // ===================================================
+// =====================================================
+// ERROR HANDLER
+// =====================================================
 
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      "Unhandled server error:",
+      error
+    );
+
+    if (res.headersSent) {
+      return next(error);
+    }
+
+    res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Internal server error",
+    });
+  }
+);
+
+// =====================================================
+// LOCAL DEVELOPMENT
+// =====================================================
+
+if (require.main === module) {
   const PORT =
     process.env.PORT || 3000;
 
-  app.listen(
-    PORT,
-    (err) => {
+  const startLocalServer = async () => {
+    try {
+      await ensureDBConnection();
+      await initializeApollo();
 
-      if (err) {
-        console.error(err);
-        return;
-      }
+      app.listen(
+        PORT,
+        () => {
+          console.log(
+            `🚀 App is listening at ${PORT}`
+          );
 
-      console.log(
-        `App is listening at ${PORT}`
+          console.log(
+            `GraphQL: http://localhost:${PORT}/graphql`
+          );
+
+          console.log(
+            `SSE: http://localhost:${PORT}/events`
+          );
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Failed to start server:",
+        error
       );
 
-      console.log(
-        `GraphQL: http://localhost:${PORT}/graphql`
-      );
-
-      console.log(
-        `SSE: http://localhost:${PORT}/events`
-      );
+      process.exit(1);
     }
-  );
+  };
+
+  startLocalServer();
 }
 
-startServer();
+// =====================================================
+// EXPORT FOR VERCEL
+// =====================================================
+
+module.exports = app;
