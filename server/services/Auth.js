@@ -57,21 +57,21 @@ const login = async(_,args,{res}) => {
     const token = await jwt.sign(payload, "sarag-clinic", {expiresIn: '1d'});
 
         // 🍪 Set JWT cookie
-    // res.cookie("sarag_clinic_token", token, {
-    //     httpOnly: true,
-    //     secure: true,
-    //     sameSite: "none",
-    //     maxAge: 24 * 60 * 60 * 1000,
-    //     path: "/",
-    // });
-
     res.cookie("sarag_clinic_token", token, {
         httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        path: "/",
+        secure: true,
+        sameSite: "none",
         maxAge: 24 * 60 * 60 * 1000,
+        path: "/",
     });
+
+    // res.cookie("sarag_clinic_token", token, {
+    //     httpOnly: true,
+    //     secure: false,
+    //     sameSite: "lax",
+    //     path: "/",
+    //     maxAge: 24 * 60 * 60 * 1000,
+    // });
 
     console.log("TOKEN...\n", token)
 
