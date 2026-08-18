@@ -35,38 +35,44 @@
 // export default NavbarMobile
 
 
+import { useSelector } from "react-redux";
 import { navbarData } from "../data";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const NavbarMobile = () => {
+const NavbarMobile = ({role}) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+
   return (
-    <div className="flex justify-around gap-[20px] items-center bg-theme h-[65px] py-[5px]">
-      {navbarData.map((item) => {
-        const isActive = location.pathname === item.link;
+    <div>
+        {role === "admin" && 
+            <div className="flex justify-around gap-[20px] items-center bg-theme h-[65px] py-[5px]">
+            {navbarData.map((item) => {
+                const isActive = location.pathname === item.link;
 
-        return (
-          <div
-            key={item.id}
-            onClick={() => navigate(item.link)}
-            className={`cursor-pointer flex flex-col items-center ${
-              isActive
-                ? "text-[#FACC15]"
-                : "text-content"
-            }`}
-          >
-            <div className="text-[28px]">
-              <item.icon />
-            </div>
+                return (
+                <div
+                    key={item.id}
+                    onClick={() => navigate(item.link)}
+                    className={`cursor-pointer flex flex-col items-center ${
+                    isActive
+                        ? "text-[#FACC15]"
+                        : "text-content"
+                    }`}
+                >
+                    <div className="text-[28px]">
+                    <item.icon />
+                    </div>
 
-            <div className="text-[12px]">
-              {item.label}
+                    <div className="text-[12px]">
+                    {item.label}
+                    </div>
+                </div>
+                );
+            })}
             </div>
-          </div>
-        );
-      })}
+        }
     </div>
   );
 };

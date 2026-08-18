@@ -4,22 +4,25 @@ import { BrowserRouter } from "react-router-dom";
 
 import { ApolloProvider } from "@apollo/client/react";
 
-import client from "./apollo/client";
+import client from "./apolloClient";
 import RealtimeProvider from "./components/RealtimeProvider";
 
-import App from "./App";
-import './index.css'
+import { Provider } from "react-redux";
+import { store } from "./redux/store";
 
-ReactDOM.createRoot(
-  document.getElementById("root")
-).render(
+import App from "./App";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       <ApolloProvider client={client}>
         <RealtimeProvider>
-          <App />
+          <Provider store={store}>
+            <App />
+          </Provider>
         </RealtimeProvider>
       </ApolloProvider>
     </BrowserRouter>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

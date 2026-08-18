@@ -16,6 +16,10 @@ const getDashboardStats = require("./utils/dashboardStats");
 
 dotenv.config();
 
+const {authenticate} = require("./middleware/auth");
+const cookieParser = require("cookie-parser");
+const authPlugin = require("./plugins/authPlugin");
+
 const app = express();
 
 // =====================================================
@@ -67,7 +71,7 @@ const corsOptions = {
 
 // Apply CORS globally
 app.use(cors(corsOptions));
-
+app.use(cookieParser());
 
 // =====================================================
 // DATABASE CONNECTION
@@ -93,6 +97,9 @@ const ensureDBConnection = async () => {
 const server = new ApolloServer({
   typeDefs,
   resolvers,
+  plugins: [
+    authPlugin,
+  ],
 });
 
 
@@ -123,21 +130,29 @@ app.use(
   express.json(),
 
   async (req, res, next) => {
+
     try {
-      // Make sure database is connected
+
       await ensureDBConnection();
 
-      // Make sure Apollo is started
       await initializeApollo();
 
-      // Pass request to Apollo
-      return expressMiddleware(server)(
-        req,
-        res,
-        next
-      );
+      return expressMiddleware(
+        server,
+        {
+          context: async ({ req, res }) => {
+
+            return {
+              req,
+              res,
+              user: null,
+            };
+          },
+        }
+      )(req, res, next);
 
     } catch (error) {
+
       console.error(
         "❌ GraphQL initialization error:",
         error
@@ -407,6 +422,37 @@ app.use(
 
     });
 
+  }
+);
+
+
+// =====================================================
+// LOGOUT HANDLE
+// =====================================================
+
+ 
+app.post(
+  "/logout",
+  (req, res) => {
+
+    res.clearCookie(
+      "sarag_clinic_token",
+      {
+        httpOnly: true,
+        secure:
+          process.env.NODE_ENV === "production",
+        sameSite:
+          process.env.NODE_ENV === "production"
+            ? "none"
+            : "lax",
+        path: "/",
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: "Logged out successfully",
+    });
   }
 );
 

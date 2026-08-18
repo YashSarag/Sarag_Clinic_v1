@@ -1201,6 +1201,7 @@ import {
   FaCheck,
   FaTimes,
 } from "react-icons/fa";
+import { useSelector } from "react-redux";
 
 // =====================================================
 // UPDATE CHARGED FEE
@@ -1259,6 +1260,8 @@ const RecordCard = ({
   onBack,
   onPaymentUpdated,
 }) => {
+
+    const role = useSelector(state => state.auth)?.user.role;
 
   // ===================================================
   // PAYMENT STATE
@@ -1910,7 +1913,7 @@ const RecordCard = ({
               PAYMENT INFORMATION
           ================================================= */}
 
-          <div
+          { role === "admin" && <div
             className="
               mt-6
               border-t
@@ -2337,8 +2340,7 @@ const RecordCard = ({
 
             )}
 
-          </div>
-
+          </div>}
 
           {/* =================================================
               RECORD INFORMATION

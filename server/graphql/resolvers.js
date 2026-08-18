@@ -502,7 +502,13 @@ const {
 } = require(
   "../utils/patientStats.js"
 );
+const { signup, login } = require("../services/Auth.js");
 
+const {
+  isAdmin,
+  isEmployee,
+  isAdminOrEmployee,
+} = require("../middleware/auth");
 
 const resolvers = {
 
@@ -516,7 +522,8 @@ const resolvers = {
     // PATIENTS
     // ---------------------------------------------------
 
-    patients: async (_, { search }) => {
+    patients: async (_, { search }, {user}) => {
+      isAdmin(user);
 
       let filter = {};
 
@@ -579,8 +586,8 @@ const resolvers = {
     // SINGLE PATIENT
     // ---------------------------------------------------
 
-    patient: async (_, { id }) => {
-
+    patient: async (_, { id }, {user}) => {
+      isAdmin(user);
       return await Patient.findById(id);
 
     },
@@ -590,8 +597,8 @@ const resolvers = {
     // ALL RECORDS
     // ---------------------------------------------------
 
-    records: async () => {
-
+    records: async (_,args,{user}) => {
+      isAdminOrEmployee(user)
       return await Record.find()
         .populate("patient")
         .sort({
@@ -605,8 +612,8 @@ const resolvers = {
     // DASHBOARD STATS
     // ---------------------------------------------------
 
-    dashboardStats: async () => {
-
+    dashboardStats: async (_,args,{user}) => {
+      isAdmin(user)
       return await getDashboardStats();
 
     },
@@ -725,11 +732,17 @@ const resolvers = {
 
   Mutation: {
 
+    signup: signup,
+
+    login: login,
+
     // ===================================================
     // ADD RECORD
     // ===================================================
 
-    addRecord: async (_, args) => {
+    addRecord: async (_, args,{user}) => {
+
+     isAdminOrEmployee(user);
 
       console.log(
         "📥 ADD RECORD REQUEST:",
@@ -1150,8 +1163,10 @@ const resolvers = {
 
     setChargedAmountFunc: async (
       _,
-      { id, fee }
+      { id, fee }, {user}
     ) => {
+     
+      isAdmin(user);
 
       const chargedFee =
         Number(fee);
@@ -1337,8 +1352,10 @@ const resolvers = {
 
     setPaidAmountFunc: async (
       _,
-      { id, paidAmount }
+      { id, paidAmount }, {user}
     ) => {
+
+      isAdmin(user);
 
       const amountPaid =
         Number(paidAmount);
