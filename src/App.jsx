@@ -55,7 +55,7 @@ const App = () => {
         </div>
         
 
-        <div className={`my-[75px]}`}>
+        <div className={`my-[75px]`}>
           <Routes>
             <Route path="/login" element={
               <OpenRoute role = {role} allowedRoles={["invalid"]}>
