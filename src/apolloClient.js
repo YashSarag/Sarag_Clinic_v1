@@ -37,7 +37,8 @@ import { logout } from "./redux/authSlice";
 
 const httpLink = new HttpLink({
 
-  uri: "http://localhost:3000/graphql",
+  // uri: "http://localhost:3000/graphql",
+  uri: "https://sarag-clinic-v1-8a8q.vercel.app/graphql",
 
   credentials: "include",
 
