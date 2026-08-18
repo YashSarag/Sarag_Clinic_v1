@@ -28,7 +28,7 @@ const app = express();
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://sarag-clinic-v2.netlify.app",   
+  "https://sarag-clinic-v2.netlify.app", 
 
   // Optional: current Netlify deploy preview
   "https://6a7f2af73491cbb289195d81--sarag-clinic-v2.netlify.app",
